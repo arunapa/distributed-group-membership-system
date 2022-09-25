@@ -19,8 +19,10 @@ public class Node {
         NodeManager nodeMgr = null;
         Thread nodeMgrThread = null;
 
+        boolean terminate = false;
+
         try {
-            while (true) {
+            while (!terminate) {
                 // Command line interface implementation
                 Scanner scanner = new Scanner(System.in);
                 String command = scanner.nextLine();
@@ -66,10 +68,16 @@ public class Node {
                         if (nodeMgrThread.isAlive()) {
                             nodeMgr.exit = true;
                         }
+
+                        terminate = true;
                         break;
 
                     case "clear":
                         System.out.println("\n\n");
+                        break;
+
+                    case "neighbors":
+                        nodeMgr.printNeighbors();
                         break;
 
                     default:

@@ -38,8 +38,8 @@ public class NodeManager extends Thread {
     private ScheduledExecutorService failureDetectionExecutor = Executors.newScheduledThreadPool(1);
 
 
-    private static long PING_EXECUTION_FREQ = 500; // aka how frequently do you want neighbors to ping each other
-    private static long TIMEOUT_PERIOD = 2500; // aka timeout period exceeding which members get dropped
+    private static long PING_EXECUTION_FREQ = 1000; // aka how frequently do you want neighbors to ping each other
+    private static long TIMEOUT_PERIOD = 3000; // aka timeout period exceeding which members get dropped
 
     private static String introducerIpAddress = "172.22.158.215";
     private static int introducerPort = 6000;
@@ -162,14 +162,7 @@ public class NodeManager extends Thread {
 
         List<Member> members = new ArrayList<Member>();
         members.add(selfEntry);
-
-        if (membershipList.size() > 1) {
-            List<Integer> neighborIndices = findNeighborIndices();
-            for (int i: neighborIndices) {
-                String targetIpAddress = membershipList.get(i).getAddress();
-                sendUdpPacket(targetIpAddress, port, "LEAVE " + marshalMembershipList(members));
-            }
-        }
+        broadcastToNeighbors("LEAVE " + marshalMembershipList(members));
     }
 
     // When a node joins the group, this thread will constantly ping all of the neighboring nodes
@@ -183,6 +176,12 @@ public class NodeManager extends Thread {
                     String payload = "PING " + membershipList.get(i).getId() + "@" + timestamp;
                     sendUdpPacket(targetIpAddress, port, payload);
                 }
+
+                for (int i = 0; i < membershipList.size(); i++) {
+                    if (!neighborIndices.contains(i)) {
+                        membershipList.get(i).setLastUpdatedTime(0);
+                    }
+                } 
             }
         }
     };
@@ -191,16 +190,15 @@ public class NodeManager extends Thread {
     Runnable failureDetector = new Runnable() {
         public void run() {
             List<Integer> indicesToPrune = new ArrayList<Integer>();
+            List<Integer> neighborIndices = findNeighborIndices();
 
-            for (int i = 0; i < membershipList.size(); i++) {
-                if (! membershipList.get(i).getId().equals(id)) {
-                    // Three ping cycles have passed with no response, mark the member as failed
-                    long currentTimestamp = System.currentTimeMillis();
-                    long lastUpdatedTime = membershipList.get(i).getLastUpdatedTime();
-                    if (lastUpdatedTime != 0 && (currentTimestamp - lastUpdatedTime > TIMEOUT_PERIOD)) {
-                        System.out.println("Haven't heard back from " + membershipList.get(i).getId() + " in " + TIMEOUT_PERIOD + "ms. Disseminating failure...");
-                        indicesToPrune.add(i);
-                    }
+            for (Integer index: neighborIndices) {
+                // If three ping cycles have passed with no response, mark the member as failed
+                long currentTimestamp = System.currentTimeMillis();
+                long lastUpdatedTime = membershipList.get(index).getLastUpdatedTime();
+                if (lastUpdatedTime != 0 && (currentTimestamp - lastUpdatedTime > TIMEOUT_PERIOD)) {
+                    System.out.println("No ACK received from neighbor " + membershipList.get(index).getId() + " in " + TIMEOUT_PERIOD + "ms. Disseminating failure...");
+                    indicesToPrune.add(index);
                 }
             }
 
@@ -235,7 +233,7 @@ public class NodeManager extends Thread {
 
             // Start pinging your neighbors
             List<Member> newMembersList = new ArrayList<Member>();
-            newMembersList.add(new Member(id, address, System.currentTimeMillis()));
+            newMembersList.add(new Member(id, address, 0));
             String broadcast = "NEW_MEMBER " + marshalMembershipList(newMembersList);
             broadcastToNeighbors(broadcast);
 
@@ -248,7 +246,7 @@ public class NodeManager extends Thread {
 
             // Then start ping-ack'ing with group members
             pingExecutor.scheduleAtFixedRate(pingMonitor, 0, PING_EXECUTION_FREQ, TimeUnit.MILLISECONDS);
-            failureDetectionExecutor.scheduleAtFixedRate(failureDetector, 0, 100, TimeUnit.MILLISECONDS);
+            failureDetectionExecutor.scheduleAtFixedRate(failureDetector, 0, PING_EXECUTION_FREQ, TimeUnit.MILLISECONDS);
 
             while (!exit) {
                 // Keep the thread alive, listen for any new packets on the port
@@ -314,7 +312,7 @@ public class NodeManager extends Thread {
                         System.out.println("Removing member...");
                         tempList.get(0).printEntry();
                         membershipList.remove(tempList.get(0));
-                        broadcastToNeighbors("REMOVE_MEMBER " + marshalMembershipList(tempList));
+                        broadcastToNeighbors("LEAVE " + marshalMembershipList(tempList));
                     }
                 }
             }
@@ -351,7 +349,7 @@ public class NodeManager extends Thread {
 
     private boolean doesListContainEntry(Member member) {
         for (Member entry: membershipList) {
-            if (entry.equals(member)) {
+            if (entry.getId().equals(member.getId())) {
                 return true;
             }
         }
@@ -367,5 +365,9 @@ public class NodeManager extends Thread {
             }
         }
         return false;
+    }
+
+    public void printNeighbors() {
+        System.out.println(findNeighborIndices());
     }
 }

@@ -41,7 +41,11 @@ public class Member {
     public void printEntry() {
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");    
         Date date = new Date(lastUpdated);
-        System.out.println("ID: " + id + "\t\t Last updated: " + dateFormat.format(date));
+        if (this.lastUpdated != 0) {
+            System.out.println("ID: " + id + "\t Last updated: " + dateFormat.format(date));
+        } else {
+            System.out.println("ID: " + id);
+        }
     }
 
     @Override
