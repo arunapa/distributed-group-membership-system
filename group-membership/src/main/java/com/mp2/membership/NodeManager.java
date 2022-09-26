@@ -1,6 +1,5 @@
 package com.mp2.membership;
 
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
@@ -21,14 +20,15 @@ import javax.xml.bind.JAXBContext;
 import javax.xml.bind.Marshaller;
 import javax.xml.bind.Unmarshaller;
 
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+
 public class NodeManager extends Thread {
     private String id;
     private String address; // IP address of the node
     private int port = 8000; // Port of the node
     private long spawnTimestamp;
     private List<Member> membershipList = new ArrayList<Member>();
-
-    FileWriter fileWriter;
 
     private DatagramSocket socket = null;
 
@@ -44,12 +44,13 @@ public class NodeManager extends Thread {
     private static String introducerIpAddress = "172.22.158.215";
     private static int introducerPort = 6000;
 
+    private static Logger logger = LogManager.getLogger(NodeManager.class);
+
     public NodeManager(String address, String id, List<Member> membershipList, long spawnTimestamp) throws IOException {
         this.address = address;
         this.id = id;
         this.membershipList = membershipList;
         this.spawnTimestamp = spawnTimestamp;
-        fileWriter = new FileWriter(id + ".log");
     }
 
     private void sendUdpPacket(String targetIpAddress, int targetPort, String payload) {
@@ -58,10 +59,9 @@ public class NodeManager extends Thread {
             byte buffer[] = payload.getBytes();
             DatagramPacket udpPayload = new DatagramPacket(buffer, buffer.length, targetInetAddress, targetPort);
             socket.send(udpPayload);
-            fileWriter.write("SENT: " + buffer.length + " bytes " + payload);
-            fileWriter.write("\n");
+            logger.info("SENT: " + buffer.length + " bytes " + payload);
         } catch (Exception e) {
-            System.out.println(e);
+            logger.error(e);
         }
     }
 
@@ -74,8 +74,7 @@ public class NodeManager extends Thread {
         Set<Integer> memberIndices = new HashSet<Integer>();
         memberIndices.add((index + 1) % n);
         memberIndices.add((index + 2) % n);
-        memberIndices.add((n + index - 1) % n);
-        memberIndices.add((n + index - 2) % n);
+        memberIndices.add((index + 3) % n);
 
         memberIndices.remove(index); // don't count self as a neighbor
 
@@ -95,6 +94,7 @@ public class NodeManager extends Thread {
             return marshalledString.toString();
         } catch (Exception e) {
             System.out.println(e);
+            logger.error(e);
             return "";
         }
     }
@@ -112,6 +112,7 @@ public class NodeManager extends Thread {
             neighborMembershipList = members.getMembers();
         } catch (Exception e) {
             System.out.println(e);
+            logger.error(e);
         }
         return neighborMembershipList;
     }
@@ -133,6 +134,7 @@ public class NodeManager extends Thread {
 
         } catch (Exception e) {
             System.out.println(e);
+            logger.error(e);
         }
     }
 
@@ -198,6 +200,7 @@ public class NodeManager extends Thread {
                 long lastUpdatedTime = membershipList.get(index).getLastUpdatedTime();
                 if (lastUpdatedTime != 0 && (currentTimestamp - lastUpdatedTime > TIMEOUT_PERIOD)) {
                     System.out.println("No ACK received from neighbor " + membershipList.get(index).getId() + " in " + TIMEOUT_PERIOD + "ms. Disseminating failure...");
+                    logger.info("No ACK received from neighbor " + membershipList.get(index).getId() + " in " + TIMEOUT_PERIOD + "ms. Disseminating failure...");
                     indicesToPrune.add(index);
                 }
             }
@@ -254,8 +257,7 @@ public class NodeManager extends Thread {
                 DatagramPacket receivePacket = new DatagramPacket(receivePayload, receivePayload.length);
                 socket.receive(receivePacket);
                 String message = new String(receivePacket.getData(), receivePacket.getOffset(), receivePacket.getLength());
-                fileWriter.write("RECEIVED: " + message);
-                fileWriter.write("\n");
+                logger.info("RECEIVED: " + receivePacket.getLength() + "bytes " + message);
                 String senderIpAddress = receivePacket.getAddress().getHostAddress();
 
                 if (message.startsWith("ACK")) {
@@ -285,6 +287,7 @@ public class NodeManager extends Thread {
                     // don't do anything in this case
                     if (!doesListContainEntry(tempList.get(0))) {
                         System.out.println("Adding new member to group...");
+                        logger.info("Adding new member to group...");
                         tempList.get(0).printEntry();
                         membershipList.add(tempList.get(0));
                         broadcastToNeighbors("NEW_MEMBER " + marshalMembershipList(tempList));
@@ -298,6 +301,7 @@ public class NodeManager extends Thread {
                     // don't do anything in this case
                     if (doesListContainEntry(tempList.get(0))) {
                         System.out.println("Registering failure...");
+                        logger.info("Registering failure...");
                         tempList.get(0).printEntry();
                         membershipList.remove(tempList.get(0));
                         broadcastToNeighbors("FAILURE " + marshalMembershipList(tempList));
@@ -310,6 +314,7 @@ public class NodeManager extends Thread {
                     // don't do anything in this case
                     if (doesListContainEntry(tempList.get(0))) {
                         System.out.println("Removing member...");
+                        logger.info("Removing member...");
                         tempList.get(0).printEntry();
                         membershipList.remove(tempList.get(0));
                         broadcastToNeighbors("LEAVE " + marshalMembershipList(tempList));
@@ -322,12 +327,12 @@ public class NodeManager extends Thread {
                 pingExecutor.shutdown();
                 failureDetectionExecutor.shutdown();
                 socket.close();
-                fileWriter.close();
                 return;
             }
 
         } catch(Exception e) {
             System.out.println(e);
+            logger.error(e);
         }
     }
 

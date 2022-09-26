@@ -10,17 +10,19 @@ import javax.xml.bind.JAXBContext;
 import javax.xml.bind.Marshaller;
 import javax.xml.bind.Unmarshaller;
 
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
+
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 public class Introducer {
     private static List<Member> membershipList = new ArrayList<Member>();
     private static int port = 6000;
     private static int targetPort = 8000;
     private static DatagramSocket socket;
-    private static FileWriter fileWriter;
+    private static Logger logger = LogManager.getLogger(Introducer.class);
 
     private static String getMessageBody(String message) { return message.split(" ")[1]; }
 
@@ -36,6 +38,7 @@ public class Introducer {
             return marshalledString.toString();
         } catch (Exception e) {
             System.out.println(e);
+            logger.error(e);
             return "";
         }
     }
@@ -53,6 +56,7 @@ public class Introducer {
             neighborMembershipList = members.getMembers();
         } catch (Exception e) {
             System.out.println(e);
+            logger.error(e);
         }
         return neighborMembershipList;
     }
@@ -63,17 +67,15 @@ public class Introducer {
             byte buffer[] = payload.getBytes();
             DatagramPacket udpPayload = new DatagramPacket(buffer, buffer.length, targetInetAddress, targetPort);
             socket.send(udpPayload);
-            fileWriter.write("SENT: " + buffer.length + " bytes " + payload);
-            fileWriter.write("\n");
+            logger.info("SENT: " + buffer.length + " bytes " + payload);
         } catch (Exception e) {
             System.out.println(e);
+            logger.error(e);
         }
     }
 
     public static void main(String[] args) throws IOException {
         System.out.println( "Hello from Introducer!" );
-
-        fileWriter = new FileWriter("introducer.log");
 
         try {
             socket = new DatagramSocket(port);
@@ -84,12 +86,12 @@ public class Introducer {
                 socket.receive(receivePacket);
                 String message = new String(receivePacket.getData(), receivePacket.getOffset(), receivePacket.getLength());
                 String senderIpAddress = receivePacket.getAddress().getHostAddress();
-                fileWriter.write("RECEIVED: " + message);
-                fileWriter.write("\n");
+                logger.info("RECEIVED: " + receivePacket.getLength() + "bytes " + message);
 
                 if (message.startsWith("JOIN")) {
                     membershipList.add(new Member(getMessageBody(message), senderIpAddress, 0));
                     System.out.println("Added " + senderIpAddress + " to membership list" );
+                    logger.info("Added " + senderIpAddress + " to membership list" );
                     sendUdpPacket(senderIpAddress, marshalMembershipList());
                     
                 } else if(message.startsWith("FAILURE")) {
@@ -99,6 +101,7 @@ public class Introducer {
                         Member member = membershipList.get(i);
                         if (membershipList.get(i).getId().equals(removedMembers.get(0).getId())) {
                             System.out.println("Removed " + membershipList.get(i).getId() + " from list" );
+                            logger.info("Removed " + membershipList.get(i).getId() + " from list" );
                             membershipList.remove(member);
                             break;
                         }
@@ -108,6 +111,7 @@ public class Introducer {
                     for (int i = 0; i < membershipList.size(); i++) {
                         if (membershipList.get(i).getId().equals(message.split(" ")[1])) {
                             System.out.println("Cleaned up " + membershipList.get(i).getId() + " from list" );
+                            logger.info("Cleaned up " + membershipList.get(i).getId() + " from list" );
                             membershipList.remove(i);
                             break;
                         }
@@ -117,7 +121,7 @@ public class Introducer {
 
         } catch(Exception e) {
             System.out.println(e);
+            logger.error(e);
         }
-        fileWriter.close();
     }
 }

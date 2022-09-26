@@ -6,8 +6,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+
 public class Node {
     private static int port = 8000; // Setting port value as constant across all hosts
+    private static Logger logger = LogManager.getLogger(Node.class);
 
     public static void main(String[] args) throws UnknownHostException {
         List<Member> membershipList = new ArrayList<Member>();
@@ -40,6 +44,7 @@ public class Node {
                     
                     case "join":
                         System.out.println("Initiating join...");
+                        logger.info("Initiating join...");
                         
                         spawnTimestamp = System.currentTimeMillis();
                         id = ipAddress + ":" + port + "_" + spawnTimestamp;
@@ -53,6 +58,7 @@ public class Node {
 
                     case "leave":
                         System.out.println("Initiating leave...");
+                        logger.info("Initiating leave...");
 
                         nodeMgr.initiateLeave();
                         
@@ -61,6 +67,7 @@ public class Node {
 
                         if (nodeMgrThread == null) {
                             System.out.println("ERROR: Unable to perform leave, are you sure the node has joined the group?");
+                            logger.info("ERROR: Unable to perform leave, are you sure the node has joined the group?");
                             break;
                         }
 
@@ -81,12 +88,14 @@ public class Node {
                         break;
 
                     default:
-                        System.out.println("ERROR: Unknown option: " + command + ".\nAllowed commands: list_mem, list_self, join, leave, clear");
+                    System.out.println("ERROR: Unknown option: " + command + ".\nAllowed commands: list_mem, list_self, join, leave, clear");
+                    logger.info("ERROR: Unknown option: " + command + ".\nAllowed commands: list_mem, list_self, join, leave, clear");
                 }
             }
 
         } catch(Exception e) {
             System.out.println(e);
+            logger.error(e);
         }
     }
 }
